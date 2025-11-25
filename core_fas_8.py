@@ -81,8 +81,6 @@ class CoreMapGUI:
 
         # Режим окраски (для градиента)
         self.coloring_mode_var = tk.StringVar(value="По типам ТВС")
-        self.gradient_low_color = "#0000FF"   # синий — минимум
-        self.gradient_high_color = "#FF0000"  # красный — максимум
 
         # Текстовые поля для статистики масс по выбранному типу
         self.stats_text_fuel = tk.StringVar(value="m_топл: данных нет")
@@ -774,9 +772,17 @@ class CoreMapGUI:
         return f"#{r:02X}{g:02X}{b:02X}"
 
     # ---------- Градиентная окраска ----------
-
     def apply_coloring_mode(self):
-        """Применить выбранный режим окраски (по типам или градиент по массам)."""
+        """
+        Применить выбранный режим окраски (по типам или градиент по массам).
+
+        Градиент сделан по принципу VBA:
+        - задаётся "центр" (здесь берем среднее по выбранной выборке);
+        - отклонения вниз от центра -> холодные тона (R,G снижаются, B=255);
+        - отклонения вверх -> тёплые (R=255, G,B снижаются);
+        - при нулевом отклонении ячейка почти белая (R=G=B=255).
+        Цвета не уходят в тёмные: компоненты ограничены диапазоном [100..255].
+        """
         if not self.cells:
             return
 
@@ -818,10 +824,11 @@ class CoreMapGUI:
 
         selected_type = self.current_fuel_var.get()
 
-        # Собираем значения
+        # --- собираем значения и считаем min/max/mean ---
         values = {}  # cid -> v
         v_min = None
         v_max = None
+        sum_v = 0.0
 
         for cid, cell in self.cells.items():
             if per_type and cell.get("fuel_type") != selected_type:
@@ -840,6 +847,7 @@ class CoreMapGUI:
                 continue
 
             values[cid] = v
+            sum_v += v
             if v_min is None or v < v_min:
                 v_min = v
             if v_max is None or v > v_max:
@@ -856,33 +864,64 @@ class CoreMapGUI:
             self.apply_coloring_mode()
             return
 
-        low_color = self.gradient_low_color
-        high_color = self.gradient_high_color
+        # --- центр и "амплитуда" отклонений (аналог dblValueCenter / dblSwing) ---
+        n_vals = len(values)
+        center = sum_v / n_vals  # аналог dblValueCenter; в VBA он был 1.0, здесь — среднее
 
-        # Если все значения одинаковые — используем средний цвет
-        if v_max == v_min:
-            mid_color = self._interpolate_color(low_color, high_color, 0.5)
+        # swing = max(|v_min - center|, |v_max - center|)
+        swing = max(abs(v_min - center), abs(v_max - center))
+        if swing <= 0.0:
+            # все значения одинаковы – красим как почти белые для участвующих ячеек
             for cid, cell in self.cells.items():
                 if per_type and cell.get("fuel_type") != selected_type:
+                    # другие типы — белые
                     self.canvas.itemconfig(cid, fill="#FFFFFF")
                 else:
                     if cid in values:
-                        self.canvas.itemconfig(cid, fill=mid_color)
+                        self.canvas.itemconfig(cid, fill="#FFFFFF")
                     else:
+                        # нулевые/отсутствующие – белые
                         self.canvas.itemconfig(cid, fill="#FFFFFF")
             return
 
-        # Окраска с нормализацией по [v_min, v_max]
+        # параметры цвета, как в VBA
+        intColorMax = 255
+        intColorMin = 100
+        color_range = intColorMax - intColorMin
+
+        # --- окраска ячеек ---
         for cid, cell in self.cells.items():
             if cid in values:
                 v = values[cid]
-                t = (v - v_min) / (v_max - v_min)
-                color = self._interpolate_color(low_color, high_color, t)
+                # нормированное отклонение от центра
+                dev = abs(v - center) / swing  # 0..(примерно 1)
+                if dev > 1.0:
+                    dev = 1.0
+                intDeltaColor = int(dev * color_range)
+
+                if v < center:  # ниже центра — холодные тона (как ветка "value < center" в VBA)
+                    intG = intColorMax - intDeltaColor
+                    intB = intColorMax
+                    intR = intColorMax - intDeltaColor
+                elif v > center:  # выше центра — тёплые тона (как "value >= center" в VBA)
+                    intR = intColorMax
+                    intG = intColorMax - intDeltaColor
+                    intB = intColorMax - intDeltaColor
+                else:
+                    intR = intColorMax
+                    intG = intColorMax
+                    intB = intColorMax
+
+                color = f"#{intR:02X}{intG:02X}{intB:02X}"
                 self.canvas.itemconfig(cid, fill=color)
+
             else:
+                # для ячеек без значения в текущем режиме:
                 if per_type:
+                    # в режиме "выбранный тип" — остальные типы делаем белыми
                     self.canvas.itemconfig(cid, fill="#FFFFFF")
                 else:
+                    # в режимах "все" оставляем базовый цвет типа ТВС
                     t_type = cell.get("fuel_type", 0)
                     if 0 <= t_type < len(self.fuel_types):
                         base_color = self.fuel_types[t_type]["color"]
