@@ -854,7 +854,7 @@ class CoreMapGUI:
             self.apply_coloring_mode()
             return
 
-        low_color = "#00FF00"   # зелёный — минимум
+        low_color = "#0000FF"   # синий — минимум
         high_color = "#FF0000"  # красный — максимум
 
         # Если все значения одинаковые — используем средний цвет
