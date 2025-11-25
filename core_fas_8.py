@@ -81,6 +81,8 @@ class CoreMapGUI:
 
         # Режим окраски (для градиента)
         self.coloring_mode_var = tk.StringVar(value="По типам ТВС")
+        self.gradient_low_color = "#0000FF"   # синий — минимум
+        self.gradient_high_color = "#FF0000"  # красный — максимум
 
         # Текстовые поля для статистики масс по выбранному типу
         self.stats_text_fuel = tk.StringVar(value="m_топл: данных нет")
@@ -854,8 +856,8 @@ class CoreMapGUI:
             self.apply_coloring_mode()
             return
 
-        low_color = "#00FF00"   # зелёный — минимум
-        high_color = "#FF0000"  # красный — максимум
+        low_color = self.gradient_low_color
+        high_color = self.gradient_high_color
 
         # Если все значения одинаковые — используем средний цвет
         if v_max == v_min:
