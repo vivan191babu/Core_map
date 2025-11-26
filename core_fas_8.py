@@ -52,6 +52,7 @@ class CoreMapGUI:
         # ---------- Состояние отображения ----------
         self.zoom_factor = 1.0
         self.pan_offset = (0.0, 0.0)
+        self.rotation_angle_deg = 0
         self.hex_size = 20
         self.base_hex_size = 20
         self.default_rings = 7
@@ -85,6 +86,9 @@ class CoreMapGUI:
         # Текстовые поля для статистики масс по выбранному типу
         self.stats_text_fuel = tk.StringVar(value="m_топл: данных нет")
         self.stats_text_abs = tk.StringVar(value="m_погл: данных нет")
+
+        # Поворот картограммы
+        self.rotation_label_var = tk.StringVar(value="0°")
 
         # Tooltip
         self.tooltip_window = None
@@ -369,6 +373,36 @@ class CoreMapGUI:
 
         ttk.Separator(control, orient=tk.HORIZONTAL).pack(fill="x", pady=5)
 
+        # --- Поворот картограммы ---
+        ttk.Label(control, text="Поворот картограммы:").pack(anchor="w")
+        rotate_frame = ttk.Frame(control)
+        rotate_frame.pack(anchor="w", pady=(2, 6))
+
+        ttk.Button(
+            rotate_frame,
+            text="⟲ -30°",
+            command=lambda: self.rotate_cartogram(-30)
+        ).pack(side="left", padx=(0, 4))
+
+        ttk.Button(
+            rotate_frame,
+            text="⟳ +30°",
+            command=lambda: self.rotate_cartogram(30)
+        ).pack(side="left", padx=(0, 4))
+
+        ttk.Label(
+            rotate_frame,
+            textvariable=self.rotation_label_var
+        ).pack(side="left")
+
+        ttk.Button(
+            control,
+            text="Сбросить поворот",
+            command=self.reset_rotation
+        ).pack(anchor="w", pady=(0, 6))
+
+        ttk.Separator(control, orient=tk.HORIZONTAL).pack(fill="x", pady=5)
+
         # --- Подсказка по управлению ---
         ttk.Label(
             control,
@@ -537,6 +571,8 @@ class CoreMapGUI:
 
         self.zoom_factor = 1.0
         self.pan_offset = (0.0, 0.0)
+        self.rotation_angle_deg = 0
+        self.update_rotation_label()
         self.reset_default_fuel_types()
 
         cells_data = []
@@ -579,10 +615,16 @@ class CoreMapGUI:
                 "color": self._auto_color_for_index(idx)
             })
 
+        angle_rad = math.radians(self.rotation_angle_deg % 360)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+
         raw_positions = []
         for cell in cells_data:
             x_raw, y_raw = self.axial_to_pixel(cell["q"], cell["r"], 1.0)
-            raw_positions.append((x_raw, y_raw))
+            x_rot = x_raw * cos_a - y_raw * sin_a
+            y_rot = x_raw * sin_a + y_raw * cos_a
+            raw_positions.append((x_rot, y_rot))
 
         xs = [p[0] for p in raw_positions]
         ys = [p[1] for p in raw_positions]
@@ -1132,6 +1174,21 @@ class CoreMapGUI:
         self.pan_offset = (px + dx, py + dy)
         self._rebuild_from_current_state()
 
+    # ---------- Поворот картограммы ----------
+
+    def update_rotation_label(self):
+        self.rotation_label_var.set(f"{self.rotation_angle_deg % 360}°")
+
+    def rotate_cartogram(self, delta_deg: int):
+        self.rotation_angle_deg = (self.rotation_angle_deg + delta_deg) % 360
+        self.update_rotation_label()
+        self._rebuild_from_current_state()
+
+    def reset_rotation(self):
+        self.rotation_angle_deg = 0
+        self.update_rotation_label()
+        self._rebuild_from_current_state()
+
     # ---------- Всплывающая подсказка ----------
 
     def build_tooltip_text(self, cell):
@@ -1369,6 +1426,8 @@ class CoreMapGUI:
 
         self.zoom_factor = 1.0
         self.pan_offset = (0.0, 0.0)
+        self.rotation_angle_deg = 0
+        self.update_rotation_label()
 
         self.build_from_cells_data(cells_data)
         self.update_fuel_type_combo()
