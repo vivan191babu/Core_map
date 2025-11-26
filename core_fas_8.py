@@ -286,9 +286,11 @@ class CoreMapGUI:
         color_modes = [
             "По типам ТВС",
             "Градиент m_топл (все)",
-            "Градиент m_погл (все)",
+            "Градиент m_бор (все)",
+            "Градиент m_гадолиний (все)",
             "Градиент m_топл (выбранный тип)",
-            "Градиент m_погл (выбранный тип)",
+            "Градиент m_бор (выбранный тип)",
+            "Градиент m_гадолиний (выбранный тип)",
         ]
         self.color_mode_combo = ttk.Combobox(
             control,
@@ -830,7 +832,7 @@ class CoreMapGUI:
 
         mode = self.coloring_mode_var.get()
 
-        # Режим по типам ТВС — просто вернуть базовые цвета
+        # Режим по типам ТВС — просто вернуть базовые цвета и заводские номера
         if mode == "По типам ТВС":
             for cid, cell in self.cells.items():
                 t = cell.get("fuel_type", 0)
@@ -838,24 +840,39 @@ class CoreMapGUI:
                     color = self.fuel_types[t]["color"]
                 else:
                     color = "#FFFFFF"
-                self.canvas.itemconfig(cid, fill=color)
+
+                self.canvas.itemconfig(cid, fill=color, outline="black", width=1)
+
+                fact_text_id = cell.get("text_factory_id")
+                if fact_text_id:
+                    self.canvas.itemconfig(
+                        fact_text_id,
+                        text=cell.get("factory_id", ""),
+                        fill="black",
+                    )
             return
 
         # Определение режима и области
-        metric = None  # "fuel" | "abs"
+        metric = None  # "fuel" | "boron" | "gd"
         per_type = False
 
         if mode == "Градиент m_топл (все)":
             metric = "fuel"
             per_type = False
-        elif mode == "Градиент m_погл (все)":
-            metric = "abs"
+        elif mode == "Градиент m_бор (все)":
+            metric = "boron"
+            per_type = False
+        elif mode == "Градиент m_гадолиний (все)":
+            metric = "gd"
             per_type = False
         elif mode == "Градиент m_топл (выбранный тип)":
             metric = "fuel"
             per_type = True
-        elif mode == "Градиент m_погл (выбранный тип)":
-            metric = "abs"
+        elif mode == "Градиент m_бор (выбранный тип)":
+            metric = "boron"
+            per_type = True
+        elif mode == "Градиент m_гадолиний (выбранный тип)":
+            metric = "gd"
             per_type = True
         else:
             # неизвестный режим — вернуться к типам
@@ -878,11 +895,10 @@ class CoreMapGUI:
 
             if metric == "fuel":
                 v = self._parse_mass(cell.get("mass_fuel", ""))
-            else:  # "abs" — суммарная масса поглотителей
-                v = (
-                    self._parse_mass(cell.get("mass_boron", "")) +
-                    self._parse_mass(cell.get("mass_gd", ""))
-                )
+            elif metric == "boron":
+                v = self._parse_mass(cell.get("mass_boron", ""))
+            else:  # metric == "gd"
+                v = self._parse_mass(cell.get("mass_gd", ""))
 
             # считаем только ненулевые значения
             if v <= 0.0:
@@ -917,13 +933,19 @@ class CoreMapGUI:
             for cid, cell in self.cells.items():
                 if per_type and cell.get("fuel_type") != selected_type:
                     # другие типы — белые
-                    self.canvas.itemconfig(cid, fill="#FFFFFF")
+                    self.canvas.itemconfig(cid, fill="#FFFFFF", outline="black", width=1)
                 else:
                     if cid in values:
-                        self.canvas.itemconfig(cid, fill="#FFFFFF")
+                        self.canvas.itemconfig(cid, fill="#FFFFFF", outline="black", width=1)
+                        fact_text_id = cell.get("text_factory_id")
+                        if fact_text_id:
+                            self.canvas.itemconfig(fact_text_id, text="+0.000", fill="black")
                     else:
                         # нулевые/отсутствующие – белые
-                        self.canvas.itemconfig(cid, fill="#FFFFFF")
+                        self.canvas.itemconfig(cid, fill="#F0F0F0", outline="#CCCCCC", width=1)
+                        fact_text_id = cell.get("text_factory_id")
+                        if fact_text_id:
+                            self.canvas.itemconfig(fact_text_id, text="", fill="#CCCCCC")
             return
 
         # параметры цвета, как в VBA
@@ -932,6 +954,8 @@ class CoreMapGUI:
         color_range = intColorMax - intColorMin
 
         # --- окраска ячеек ---
+        inactive_fill = "#F0F0F0"
+        inactive_outline = "#CCCCCC"
         for cid, cell in self.cells.items():
             if cid in values:
                 v = values[cid]
@@ -955,21 +979,30 @@ class CoreMapGUI:
                     intB = intColorMax
 
                 color = f"#{intR:02X}{intG:02X}{intB:02X}"
-                self.canvas.itemconfig(cid, fill=color)
+                self.canvas.itemconfig(cid, fill=color, outline="black", width=1)
+
+                # относительное отклонение от среднего (в долях)
+                rel_dev = 0.0 if center == 0 else (v - center) / center
+                fact_text_id = cell.get("text_factory_id")
+                if fact_text_id:
+                    self.canvas.itemconfig(
+                        fact_text_id,
+                        text=f"{rel_dev:+.3f}",
+                        fill="black",
+                    )
 
             else:
                 # для ячеек без значения в текущем режиме:
-                if per_type:
-                    # в режиме "выбранный тип" — остальные типы делаем белыми
-                    self.canvas.itemconfig(cid, fill="#FFFFFF")
-                else:
-                    # в режимах "все" оставляем базовый цвет типа ТВС
-                    t_type = cell.get("fuel_type", 0)
-                    if 0 <= t_type < len(self.fuel_types):
-                        base_color = self.fuel_types[t_type]["color"]
-                    else:
-                        base_color = "#FFFFFF"
-                    self.canvas.itemconfig(cid, fill=base_color)
+                self.canvas.itemconfig(
+                    cid,
+                    fill=inactive_fill,
+                    outline=inactive_outline,
+                    width=1,
+                )
+
+                fact_text_id = cell.get("text_factory_id")
+                if fact_text_id:
+                    self.canvas.itemconfig(fact_text_id, text="", fill=inactive_outline)
 
     # ---------- Статистика масс по выбранному типу ----------
 
