@@ -399,6 +399,12 @@ class CoreMapGUI:
 
         ttk.Button(
             control,
+            text="Сбросить масштаб/сдвиг",
+            command=self.reset_view
+        ).pack(anchor="w", pady=(0, 4))
+
+        ttk.Button(
+            control,
             text="Сбросить поворот",
             command=self.reset_rotation
         ).pack(anchor="w", pady=(0, 6))
@@ -1215,6 +1221,12 @@ class CoreMapGUI:
     def rotate_cartogram(self, delta_deg: int):
         self.rotation_angle_deg = (self.rotation_angle_deg + delta_deg) % 360
         self.update_rotation_label()
+        self._rebuild_from_current_state()
+
+    def reset_view(self):
+        """Вернуть масштаб и сдвиг к значениям по умолчанию."""
+        self.zoom_factor = 1.0
+        self.pan_offset = (0.0, 0.0)
         self._rebuild_from_current_state()
 
     def reset_rotation(self):
