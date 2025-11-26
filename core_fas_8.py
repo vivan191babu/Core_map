@@ -122,6 +122,49 @@ class CoreMapGUI:
         ]
         return palette[(idx - 1) % len(palette)]
 
+    def get_or_create_fuel_type_index(self, type_label: str) -> int:
+        """
+        Преобразует текстовый ярлык типа ТВС (например, 'ОМ-1' или 'ПЗ-2')
+        во внутренний индекс fuel_type. Если такого типа ещё нет в self.fuel_types,
+        он создаётся с автоматически подобранным цветом.
+
+        Поддерживает старый формат, когда в CSV в fuel_type записывался просто индекс.
+        """
+        if type_label is None:
+            type_label = ""
+        name = str(type_label).strip()
+
+        # Пустое поле считаем "Пусто"
+        if not name:
+            name = "Пусто"
+
+        # СТАРЫЙ ФОРМАТ: если поле целочисленное — трактуем его как индекс
+        if name.isdigit():
+            idx = int(name)
+            # расширяем список типов до нужного индекса
+            while len(self.fuel_types) <= idx:
+                j = len(self.fuel_types)
+                self.fuel_types.append({
+                    "name": f"Тип {j}",
+                    "color": self._auto_color_for_index(j),
+                })
+            return idx
+
+        # НОВЫЙ ФОРМАТ: строковое имя типа ('ОМ-1', 'ПЗ-2', ...)
+        # ищем существующий тип с таким именем
+        for idx, ft in enumerate(self.fuel_types):
+            if ft["name"] == name:
+                return idx
+
+        # если не нашли — создаём новый тип
+        new_idx = len(self.fuel_types)
+        self.fuel_types.append({
+            "name": name,
+            "color": self._auto_color_for_index(new_idx),
+        })
+        return new_idx
+
+
     def reset_default_fuel_types(self):
         self.fuel_types = self.make_default_fuel_types()
 
@@ -1370,18 +1413,25 @@ class CoreMapGUI:
                     ]
                 )
                 for cell in entries:
+                    ft_idx = cell.get("fuel_type", 0)
+                    if 0 <= ft_idx < len(self.fuel_types):
+                        ft_name = self.fuel_types[ft_idx]["name"]
+                    else:
+                        ft_name = ""
+
                     writer.writerow([
                         cell["index"],
                         cell["q"],
                         cell["r"],
                         cell["shape"],
-                        cell["fuel_type"],
+                        ft_name,                      # пишем НАЗВАНИЕ типа ТВС
                         cell.get("pos_label", ""),
                         cell.get("factory_id", ""),
                         cell.get("mass_fuel", ""),
                         cell.get("mass_boron", ""),
                         cell.get("mass_gd", ""),
                     ])
+
             messagebox.showinfo("Сохранение", "Картограмма сохранена.")
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось сохранить CSV:\n{e}")
@@ -1418,11 +1468,14 @@ class CoreMapGUI:
                 idx = int(row["index"])
                 q = int(row["q"])
                 r = int(row["r"])
+
                 shape = row["shape"].strip().lower()
                 if shape not in ("hex", "circle"):
                     shape = "hex"
-                fuel_type = int(row["fuel_type"])
-                used_types.add(fuel_type)
+
+                # читаем тип ТВС как текст и получаем для него внутренний индекс
+                fuel_type_label = row.get("fuel_type", "")
+                fuel_type = self.get_or_create_fuel_type_index(fuel_type_label)
 
                 pos_label = row.get("pos_label") if "pos_label" in row else ""
                 if not pos_label:
@@ -1456,18 +1509,6 @@ class CoreMapGUI:
             max_type = max(used_types)
         else:
             max_type = 0
-
-        new_fuel_types = []
-        for idx in range(max_type + 1):
-            if idx < len(DEFAULT_FUEL_TYPES):
-                base = DEFAULT_FUEL_TYPES[idx]
-                new_fuel_types.append({"name": base["name"], "color": base["color"]})
-            else:
-                new_fuel_types.append({
-                    "name": f"Тип {idx}",
-                    "color": self._auto_color_for_index(idx)
-                })
-        self.fuel_types = new_fuel_types
 
         self.zoom_factor = 1.0
         self.pan_offset = (0.0, 0.0)
