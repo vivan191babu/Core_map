@@ -286,9 +286,11 @@ class CoreMapGUI:
         color_modes = [
             "По типам ТВС",
             "Градиент m_топл (все)",
-            "Градиент m_погл (все)",
+            "Градиент m_бор (все)",
+            "Градиент m_гадолиний (все)",
             "Градиент m_топл (выбранный тип)",
-            "Градиент m_погл (выбранный тип)",
+            "Градиент m_бор (выбранный тип)",
+            "Градиент m_гадолиний (выбранный тип)",
         ]
         self.color_mode_combo = ttk.Combobox(
             control,
@@ -851,20 +853,26 @@ class CoreMapGUI:
             return
 
         # Определение режима и области
-        metric = None  # "fuel" | "abs"
+        metric = None  # "fuel" | "boron" | "gd"
         per_type = False
 
         if mode == "Градиент m_топл (все)":
             metric = "fuel"
             per_type = False
-        elif mode == "Градиент m_погл (все)":
-            metric = "abs"
+        elif mode == "Градиент m_бор (все)":
+            metric = "boron"
+            per_type = False
+        elif mode == "Градиент m_гадолиний (все)":
+            metric = "gd"
             per_type = False
         elif mode == "Градиент m_топл (выбранный тип)":
             metric = "fuel"
             per_type = True
-        elif mode == "Градиент m_погл (выбранный тип)":
-            metric = "abs"
+        elif mode == "Градиент m_бор (выбранный тип)":
+            metric = "boron"
+            per_type = True
+        elif mode == "Градиент m_гадолиний (выбранный тип)":
+            metric = "gd"
             per_type = True
         else:
             # неизвестный режим — вернуться к типам
@@ -887,11 +895,10 @@ class CoreMapGUI:
 
             if metric == "fuel":
                 v = self._parse_mass(cell.get("mass_fuel", ""))
-            else:  # "abs" — суммарная масса поглотителей
-                v = (
-                    self._parse_mass(cell.get("mass_boron", "")) +
-                    self._parse_mass(cell.get("mass_gd", ""))
-                )
+            elif metric == "boron":
+                v = self._parse_mass(cell.get("mass_boron", ""))
+            else:  # metric == "gd"
+                v = self._parse_mass(cell.get("mass_gd", ""))
 
             # считаем только ненулевые значения
             if v <= 0.0:
